@@ -25,9 +25,9 @@ Logs are by default written to /var/log/aa-proxy-wican.log
 # Supported AutoPid Values
 - SOC_D - State of charge Displayed
 - SOC - State of charge
-- OUTDOOR_TEMPERATURE - Current outdoor temperature in celcius
+- TMP_A - Current outdoor/ambient temperature in celcius
 
-aa-proxy-wican will use SOC_D if available, otherwise use SOC for the battery percentage.  In addition, if OUTDOOR_TEMPERATURE is available (this is not currently available in vehicle profiles by default) it will also be used.
+aa-proxy-wican will use SOC_D if available, otherwise use SOC for the battery percentage.  In addition, if TMP_A is available it will also be used.
 
 aa-proxy-wican supports additional arguments you may wish to modify.  It can also be run over ssh should you wish to test/debug.
 
