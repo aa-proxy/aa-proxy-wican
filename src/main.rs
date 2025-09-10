@@ -47,7 +47,7 @@ struct WicanResponse {
     soc: f32,
     #[serde(alias = "SOC_D")]
     soc_d: Option<f32>,
-    #[serde(alias = "OUTDOOR_TEMPERATURE")]
+    #[serde(alias = "TMP_A")]
     outdoor_temperature: Option<f32>,
 }
 
