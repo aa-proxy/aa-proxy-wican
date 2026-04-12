@@ -374,44 +374,69 @@ async fn fetch_data(
         "Successfully sent WiCAN autopid request. Waiting for a response for up to 10 seconds..."
     );
 
-    let timeout = time::sleep(wican_timeout);
-    tokio::select! {
-        _ = timeout => {
-            warn!("Timeout: No reply from WiCAN received.");
-            Ok(None)
+    let mut full_response = Vec::new();
+    let start_time = time::Instant::now();
+
+    loop {
+        let elapsed = start_time.elapsed();
+        if elapsed >= wican_timeout {
+             warn!("Timeout: WiCAN response gathering exceeded total limit.");
+             break;
         }
-        notification = notif_stream.next() => {
-            if let Some(n) = notification {
-                let response_string = String::from_utf8(n)
-                    .context("Failed to decode WiCAN response as string")?
-                    .trim_end()
-                    .to_string();
+        let remaining_timeout = wican_timeout - elapsed;
 
-                debug!("Successfully decoded WiCAN response as string: {}", response_string);
+        tokio::select! {
+            _ = time::sleep(remaining_timeout) => {
+                warn!("Timed out waiting for more fragments.");
+                break;
+            }
+            notification = notif_stream.next() => {
+                if let Some(n) = notification {
+                    full_response.extend_from_slice(&n);
 
-                let wican_response: WicanResponse = serde_json::from_str(&response_string)
-                    .context("Failed to parse WiCAN response JSON")?;
-
-                debug!("Successfully decoded WiCAN response as JSON: {:?}", wican_response);
-
-                let battery_data = BatteryData {
-                    battery_level_percentage: Some(
-                        wican_response
-                            .soc_d
-                            .unwrap_or(wican_response.soc)
-                    ),
-                    external_temp_celsius: wican_response.outdoor_temperature,
-                    battery_capacity_wh: Some(vehicle_battery_capacity),
-                    ..Default::default()
-                };
-
-                Ok(Some(battery_data))
-            } else {
-                warn!("Notification stream ended unexpectedly.");
-                Ok(None)
+                    // Check if we have a complete JSON object by looking for a closing brace at the end
+                    if let Ok(s) = std::str::from_utf8(&full_response) {
+                        if s.trim().ends_with('}') {
+                            debug!("Detected end of JSON payload.");
+                            break;
+                        }
+                    }
+                } else {
+                    warn!("Notification stream closed unexpectedly.");
+                    break;
+                }
             }
         }
     }
+
+    if full_response.is_empty() {
+        return Ok(None);
+    }
+
+    let response_string = String::from_utf8(full_response)
+        .context("Failed to decode WiCAN response as string")?
+        .trim_end()
+        .to_string();
+
+    debug!("Successfully decoded WiCAN response as string: {}", response_string);
+
+    let wican_response: WicanResponse = serde_json::from_str(&response_string)
+        .context("Failed to parse WiCAN response JSON")?;
+
+    debug!("Successfully decoded WiCAN response as JSON: {:?}", wican_response);
+
+    let battery_data = BatteryData {
+        battery_level_percentage: Some(
+            wican_response
+                .soc_d
+                .unwrap_or(wican_response.soc)
+        ),
+        external_temp_celsius: wican_response.outdoor_temperature,
+        battery_capacity_wh: Some(vehicle_battery_capacity),
+        ..Default::default()
+    };
+
+    Ok(Some(battery_data))
 }
 
 // Post battery data to aa-proxy-rs
